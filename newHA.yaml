@@ -1,0 +1,141 @@
+# Installing HAProxy
+# haproxy.yaml file
+AWSTemplateFormatVersion: 2010-09-09
+Description: haproxy dynamic collection
+Parameters:
+  HAProxy:
+    Type: String
+    Default: LATEST
+    AllowedValues:
+      - OS Default
+      - LATEST
+    Description: HAProxy to use
+  LatestHA:
+    Type: "AWS::SSM::Parameter::Value<String>"
+    Description: Stored latest version of HA Proxy
+    Default: '/SW/HaProxy/Version'
+  EnvironmentSize:
+    Type: String
+    Default: SMALL
+    AllowedValues:
+      - SMALL
+      - MEDIUM
+      - LARGE
+    Description: Select Environment Size (S,M,L)
+  VPCId:
+    Description: VPC ID of the VPC
+    Type: AWS::EC2::VPC::Id
+  VPCPublicSubnetId:
+    Description: Subnet ID of the public subnet within the VPC
+    Type: String
+  TimeZone:
+    Type: String
+    Default: Pacific/Auckland
+    Description: Time zone identifier for the instances (e.g. Pacific/Auckland)
+  LatestAmiId :
+    Type : 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn-ami-hvm-x86_64-gp2'
+Conditions:
+  isLarge:
+    !Equals [!Ref EnvironmentSize, "LARGE"]
+  isntLarge:
+    !Not [!Equals [!Ref EnvironmentSize, "LARGE"]]
+  isLatHAProxy:
+    !Equals [!Ref HAProxy, "LATEST"]
+  isntLatHAProxy:
+    !Not [!Equals [!Ref HAProxy, "LATEST"]]
+  isLatHAProxy:
+    !Equals [!Ref HAProxy, "LATEST"]
+  isntLatHAProxy:
+    !Not [!Equals [!Ref HAProxy, "LATEST"]]
+Mappings:
+  InstanceSize:
+    SMALL:
+      "EC2" : "t2.micro"
+    MEDIUM:
+      "EC2" : "t2.small"
+    LARGE:
+      "EC2" : "t2.medium"
+Resources:
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId:
+        Ref: VPCId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+  EC2:
+    Type: "AWS::EC2::Instance"
+    DeletionPolicy: Delete
+    Properties:
+      # ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMALINUX] # Dynamic mapping + Pseudo Parameter
+      ImageId : !Ref LatestAmiId
+      InstanceType: !FindInMap [InstanceSize, !Ref EnvironmentSize, EC2]
+      KeyName: gps_newqa
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: 'true'
+          SubnetId: !Ref VPCPublicSubnetId
+      # SecurityGroups:
+      #  - !Ref InstanceSecurityGroup
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #cloud-config:
+              packages: #!If
+                #- isntLatHAProxy
+                #- !Sub |
+                #  haproxy
+                #- !Sub |
+                - gcc
+                - make
+                - openssl
+                - openssl-devel
+                - pcre-devel
+              write_files:
+                - path: /opt/setup.haproxy
+                  owner: root:root
+                  content: |
+                    #!/bin/bash -xe
+                    cd /opt
+                    wget 'http://www.haproxy.org/download/${haDir}/src/haproxy-${LatestHA}.tar.gz'
+                    tar -xzvf haproxy-${LatestHA}.tar.gz
+                    cd haproxy-${LatestHA}
+                    make CPU="native" TARGET="linux2628" USE_PCRE=1 USE_OPENSSL=1 USE_ZLIB=1 USE_REGPARM=1
+                    make install
+                  permissions: '000755'
+              runcmd:
+                - yum -y upgrade
+                - /opt/setup.haproxy
+              output :
+                all : |
+                  tee -a /var/log/cloud-init-output.log
+            - { haDir: !Join [ ".", [!Select [ 0, !Split [ ".", !Ref LatestHA]],  !Select [ 1, !Split [ ".", !Ref LatestHA]]]] }
+Outputs:
+  haroot:
+    Description: Access URL for haproxy
+    Value: !Join ["", ["http://", !GetAtt EC2.PublicIp, "/haproxy"]]
+  ssm:
+    Description: SSM Value
+    Value: !Ref LatestHA
+  hadir:
+    Description: HA Directory
+    Value: !Join [ ".", [!Select [ 0, !Split [ ".", !Ref LatestHA]],  !Select [ 1, !Split [ ".", !Ref LatestHA]]]]
+    #  Description: HA Directory
+    # Value: !Select [ 1, !Split [ ".", !Ref LatestHA]]
+  # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html
+  # output : { all : '| tee -a /var/log/cloud-init-output.log' }
