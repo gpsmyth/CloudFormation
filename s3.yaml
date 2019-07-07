@@ -1,0 +1,45 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  "Gerry's S3 bucket CF way"
+
+# Metadata:
+
+# Parameters:
+
+# Mappings:
+
+# Conditions:
+
+Resources:
+  GerrysWebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+      AccessControl: PublicRead
+  GerrysWebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: GerrysWebsiteBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Join
+              - ''
+              - - Fn::GetAtt: [ GerrysWebsiteBucket, Arn ]
+                - /*
+Outputs:
+  GerrysBucketName:
+    Value:
+      Ref: GerrysWebsiteBucket
+  GerrysBucketArn:
+    Value:
+      Fn::GetAtt: [ GerrysWebsiteBucket, Arn ]
