@@ -10,6 +10,8 @@ On s3.yaml and using `Atom` with a helper, I noted the following had to be comme
 # Mappings:
 
 # Conditions:
-```
+```  
+I am assuming a simple `index.html` and `error.html` for s3
 
-I am assuming a simple `index.html` and `error.html`
+[Template Anatomy](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html)
+> 
